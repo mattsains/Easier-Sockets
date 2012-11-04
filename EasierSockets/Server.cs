@@ -101,7 +101,7 @@ namespace EasierSockets
                         clientThreads[clientThreads.Count - 1].Start(handle);
                     }
                     //clean up unused threads
-                    for (int i=0; i<clientThreads.Count; i++)
+                    for (int i = 0; i < clientThreads.Count; i++)
                         if (!clientThreads[i].IsAlive)
                             clientThreads.RemoveAt(i);
                 }
@@ -125,7 +125,7 @@ namespace EasierSockets
             //we're, like, fifty threads deep here and I'm scared :O
             byte[] bytes = new byte[1024];
             string data = "";
-            string response="";
+            string response = "";
             int size;
             // receive a stream, and let the dispatcher handle it if we get a separator
             while (handle.Connected)
@@ -136,25 +136,16 @@ namespace EasierSockets
                 {
                     //we have a separator in the bufffer. Isolate it and send to the dispatcher
                     string[] messages = data.Split(new string[1] { s }, StringSplitOptions.None);
-                    if (data.EndsWith(s))
-                    {
-                        foreach (string str in messages)
-                            if ((response=d(str))!="")
-                                handle.Send(Encoding.ASCII.GetBytes(response+s));
-                        data = "";
-                    }
-                    else
-                    {
-                        for (int i = 0; i < messages.Length - 1; i++)
-                            if ((response = d(messages[i])) != "")
-                                handle.Send(Encoding.ASCII.GetBytes(response + s));
-                        data = messages[messages.Length - 1];
-                    }
+
+                    for (int i = 0; i < messages.Length - 1; i++)
+                        if ((response = d(messages[i])) != "")
+                            handle.Send(Encoding.ASCII.GetBytes(response + s));
+                    data = messages[messages.Length - 1];
                 }
             }
             handle.Shutdown(SocketShutdown.Both);
             handle.Close();
-            
+
         }
     }
 }
