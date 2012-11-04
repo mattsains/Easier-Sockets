@@ -61,7 +61,7 @@ namespace EasierSockets
         /// </summary>
         /// <param name="dispatch">A delegate accepting a string and sending a string</param>
         /// <param name="separator">what character/string signals the end of a message? eg newline, semicolon</param>
-        public void Listen(Dispatcher dispatch, char separator = '\n')
+        public void Listen(Dispatcher dispatch, char separator)
         {
             this.Listen(dispatch, separator.ToString());
         }
