@@ -11,6 +11,20 @@ namespace EasierSockets
     public delegate string Dispatcher(string rx);
     public class Sock
     {
+        private string separator = "\n";
+        // the delegate to call when a message is received
+        // TODO: this might be a performance killer because the threads need to lock this.
+        private Dispatcher dispatcher;
+
+        // threads serving clients
+        //TODO: use thread pooling for efficiency
+        private List<Thread> clientThreads = new List<Thread>();
+
+        // listener thread - routes clients to threads in the list
+        private Thread Listener;
+        // The physical socket we're using
+        private Socket ServerSocket;
+        private IPEndPoint remoteEP;
         /// <summary>
         /// starts listening on the port specified
         /// </summary>
@@ -36,14 +50,51 @@ namespace EasierSockets
                     throw new Exception("IP Address malformed");
                 }
             //IP Address should be valid by now, attempt a bind
-            IPEndPoint remoteEP = new IPEndPoint(IP, port);
-            Socket Listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            remoteEP = new IPEndPoint(IP, port);
+            ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         }
-        public void ListenAsync(Dispatcher dispatch, char separator)
+        /// <summary>
+        /// Starts listening for connections
+        /// When data is sent ending in separator, the Dispatcher delegate is called.
+        /// WARNING: the delegate will be called on a new thread, so make this function
+        /// thread-safe
+        /// </summary>
+        /// <param name="dispatch">A delegate accepting a string and sending a string</param>
+        /// <param name="separator">what character/string signals the end of a message? eg newline, semicolon</param>
+        public void Listen(Dispatcher dispatch, char separator='\n')
         {
-            this.ListenAsync(dispatch,separator.ToString());
+            this.Listen(dispatch,separator.ToString());
         }
-        public void ListenAsync(Dispatcher dispatch, string separator)
+        public void Listen(Dispatcher dispatch, string separator="\n")
+        {
+            this.dispatcher = dispatch;
+            this.separator=separator;
+            Listener = new Thread(new ThreadStart(ListenAsync));
+            Listener.Start();
+        }
+        public void Stop()
+        {
+            //TODO: need to change this so sockets end cleanly.
+            Listener.Abort();
+        }
+        private void ListenAsync()
+        {
+            lock (ServerSocket)
+            {
+                lock (remoteEP)
+                {
+                    ServerSocket.Bind(remoteEP);
+                }
+                //start listening forever
+                while (true)
+                {
+                    Socket handle = ServerSocket.Accept();
+
+                }
+            }
+        }
+
+        private void WaitForClient()
         {
 
         }
