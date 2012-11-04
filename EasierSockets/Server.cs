@@ -9,7 +9,7 @@ using System.Threading;
 namespace EasierSockets
 {
     public delegate string Dispatcher(string rx);
-    public class Sock
+    public class ServerSock
     {
         private string separator = "\n";
         // the delegate to call when a message is received
@@ -31,7 +31,7 @@ namespace EasierSockets
         /// <param name="port">The port to listen on</param>
         /// <param name="ip">The bind address. Default is all IPv4</param>
         /// TODO: Allow other types of comms, like UDP, IPv6, etc
-        public Sock(int port, string ip = "any")
+        public ServerSock(int port, string ip = "any")
         {
             IPAddress IP;
             if (ip == "any")
