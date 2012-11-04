@@ -89,6 +89,7 @@ namespace EasierSockets
                     ServerSocket.Bind(remoteEP);
                 }
                 //start listening forever
+                ServerSocket.Listen(10);
                 while (true)
                 {
                     Socket handle = ServerSocket.Accept();
