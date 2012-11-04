@@ -100,6 +100,10 @@ namespace EasierSockets
                         //I hate this. why can't List<T>.Add return the index of the added item? oh yeah, I remember, cascading. ugh.
                         clientThreads[clientThreads.Count - 1].Start(handle);
                     }
+                    //clean up unused threads
+                    for (int i=0; i<clientThreads.Count; i++)
+                        if (!clientThreads[i].IsAlive)
+                            clientThreads.RemoveAt(i);
                 }
             }
         }
@@ -150,6 +154,7 @@ namespace EasierSockets
             }
             handle.Shutdown(SocketShutdown.Both);
             handle.Close();
+            
         }
     }
 }
