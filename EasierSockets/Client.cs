@@ -8,10 +8,19 @@ using System.Threading;
 
 namespace EasierSockets
 {
+    /// <summary>
+    /// Makes client side of socket comms easier.
+    /// </summary>
     public class ClientSock
     {
         Socket sock;
         string separator;
+        /// <summary>
+        /// Connects to a TCP host
+        /// </summary>
+        /// <param name="host">the server to connect to</param>
+        /// <param name="port">the port to use</param>
+        /// <param name="separator">what signals the end of a message?</param>
         public ClientSock(string host, int port, string separator = "\n")
         {
             IPHostEntry hostip = Dns.GetHostEntry(host);
@@ -22,6 +31,11 @@ namespace EasierSockets
             sock.Connect(endpoint);
             this.separator = separator;
         }
+        /// <summary>
+        /// Send a message to the server
+        /// </summary>
+        /// <param name="message">The message to send. The separator is added automatically</param>
+        /// <returns>the response by the server</returns>
         public string send(string message)
         {
             byte[] tx = Encoding.ASCII.GetBytes(message + separator);
@@ -30,6 +44,9 @@ namespace EasierSockets
             sock.Receive(rx);
             return Encoding.ASCII.GetString(rx);
         }
+        /// <summary>
+        /// Destructor: closes the connection
+        /// </summary>
         public ~ClientSock()
         {
             sock.Shutdown(SocketShutdown.Both);
