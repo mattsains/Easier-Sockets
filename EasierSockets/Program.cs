@@ -9,10 +9,10 @@ namespace EasierSockets
     {
         static void Main(string[] args)
         {
-            Sock sock = new Sock(1234);
+            ServerSock sock = new ServerSock(1234);
             Dispatcher disp = new Dispatcher(handler);
-            sock.Listen(disp,"\n\r");
-            Console.WriteLine("Now Listening");
+            sock.Listen(disp,"\n");
+            Console.WriteLine("Now Listening on port 1234");
         }
         static string handler(string message)
         {
