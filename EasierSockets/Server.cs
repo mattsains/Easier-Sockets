@@ -8,31 +8,45 @@ using System.Threading;
 
 namespace EasierSockets
 {
-    public delegate string Dispatcher(string rx);
+    //this delegate is called when a client connects or disconnects
+    public delegate void ClientStateChange(int id, bool connected);
+
+    //this delegate is called when the server receives a request from a client
+    public delegate string ClientRequest(int id, string message);
     public class ServerSock
     {
-        private string separator = "\n";
+        private string separator;
         // the delegate to call when a message is received
         // TODO: this might be a performance killer because the threads need to lock this.
-        private Dispatcher dispatcher;
+        private ClientStateChange clientchange;
+        private ClientRequest clientreq;
 
         // threads serving clients
         //TODO: use thread pooling for efficiency
-        private List<Thread> clientThreads = new List<Thread>();
+        private List<ClientHandler> clients = new List<ClientHandler>();
 
         // listener thread - routes clients to threads in the list
         private Thread Listener;
+
         // The physical socket we're using
         private Socket ServerSocket;
-        private IPEndPoint remoteEP;
+
+        
         /// <summary>
-        /// starts listening on the port specified
+        /// starts listening on the port specified.
+        /// WARNING: Delegates must be thread safe
         /// </summary>
+        /// <param name="ip">The IP address to listen for. Use "any" for all IPs</param>
         /// <param name="port">The port to listen on</param>
-        /// <param name="ip">The bind address. Default is all IPv4</param>
-        /// TODO: Allow other types of comms, like UDP, IPv6, etc
-        public ServerSock(int port, string ip = "any")
+        /// <param name="separator">What signals the end of a message? A good choice is \n</param>
+        /// <param name="clientstatechange">A delegate that is called when a client connects or disconnects</param>
+        /// <param name="clientrequest">A delegate that is called when a client sends a request</param>
+        // TODO: Allow other types of comms, like UDP, IPv6, etc
+        public ServerSock(string ip, int port, string separator, ClientStateChange clientstatechange,ClientRequest clientrequest)
         {
+            this.clientchange = clientstatechange;
+            this.clientreq = clientrequest;
+
             IPAddress IP;
             if (ip == "any")
                 IP = IPAddress.Any;
@@ -49,34 +63,18 @@ namespace EasierSockets
                 {
                     throw new Exception("IP Address malformed");
                 }
+            
             //IP Address should be valid by now, attempt a bind
-            remoteEP = new IPEndPoint(IP, port);
             ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        }
-        /// <summary>
-        /// Starts listening for connections
-        /// When data is sent ending in separator, the Dispatcher delegate is called.
-        /// WARNING: the delegate will be called on a new thread, so make this function
-        /// thread-safe
-        /// </summary>
-        /// <param name="dispatch">A delegate accepting a string and sending a string</param>
-        /// <param name="separator">what character/string signals the end of a message? eg newline, semicolon</param>
-        public void Listen(Dispatcher dispatch, char separator)
-        {
-            this.Listen(dispatch, separator.ToString());
-        }
-        public void Listen(Dispatcher dispatch, string separator = "\n")
-        {
-            this.dispatcher = dispatch;
+            IPEndPoint remoteEP = new IPEndPoint(IP, port);
+            ServerSocket.Bind(remoteEP);
+            
             this.separator = separator;
             Listener = new Thread(new ThreadStart(ListenAsync));
             Listener.Start();
         }
-        public void Stop()
-        {
-            //TODO: need to change this so sockets end cleanly.
-            Listener.Abort();
-        }
+
+
         /// <summary>
         /// Waits for clients to connect, then puts them on a new thread
         /// </summary>
@@ -84,68 +82,98 @@ namespace EasierSockets
         {
             lock (ServerSocket)
             {
-                lock (remoteEP)
-                {
-                    ServerSocket.Bind(remoteEP);
-                }
                 //start listening forever
                 ServerSocket.Listen(10);
                 while (true)
                 {
                     Socket handle = ServerSocket.Accept();
-                    lock (clientThreads)
+                    //there's now a new client
+                    lock (clients)
                     {
-                        //send the client to a new WaitForClient
-                        clientThreads.Add(new Thread(new ParameterizedThreadStart(WaitForClient)));
-                        //I hate this. why can't List<T>.Add return the index of the added item? oh yeah, I remember, cascading. ugh.
-                        clientThreads[clientThreads.Count - 1].Start(handle);
+                        // puts the new client in a ClientHandler box
+                        clients.Add(new ClientHandler(handle, new Thread(WaitForClient)));
                     }
-                    //clean up unused threads
-                    for (int i = 0; i < clientThreads.Count; i++)
-                        if (!clientThreads[i].IsAlive)
-                            clientThreads.RemoveAt(i);
                 }
             }
         }
+        
         /// <summary>
         /// talks to a single client. Waits for the separator, then calls the delegate
         /// </summary>
-        /// <param name="o">The socket connected to the client, casted as object</param>
+        /// <param name="o">An object array containing the client id, and the socket</param>
         private void WaitForClient(object o)
         {
-            string s;
-            Dispatcher d;
-            lock (separator) lock (dispatcher)
-                {
-                    //cache some variables so we don't lock them for long
-                    d = dispatcher;
-                    s = separator;
-                }
-            Socket handle = (Socket)o;
-            //we're, like, fifty threads deep here and I'm scared :O
+            string sep;
+            ClientStateChange changeDel;
+            ClientRequest reqDel;
+            
+            //cache some variables so we don't lock them for long
+            lock (separator) lock (clientchange) lock (clientreq)
+            {
+                
+                sep = separator;
+                changeDel = clientchange;
+                reqDel = clientreq;
+            }
+
+            //crazy casts
+            int id = (int)((object[])o)[0];
+            Socket handle = (Socket)((object[])o)[1];
+            
+            //new arriving data
             byte[] bytes = new byte[1024];
+            //buffer
             string data = "";
-            string response = "";
-            int size;
+            //how do we reply?
+            string response="";
+
+            //tell the user that we're connected to a new client
+            changeDel(id, true);
             // receive a stream, and let the dispatcher handle it if we get a separator
             while (handle.Connected)
             {
-                size = handle.Receive(bytes);
-                data += Encoding.ASCII.GetString(bytes, 0, size);
-                if (data.Contains(s))
+                //wait for data to arrive
+                handle.Receive(bytes);
+                data += Encoding.ASCII.GetString(bytes);
+                
+                if (data.Contains(sep))
                 {
                     //we have a separator in the bufffer. Isolate it and send to the dispatcher
-                    string[] messages = data.Split(new string[1] { s }, StringSplitOptions.None);
-
-                    for (int i = 0; i < messages.Length - 1; i++)
-                        if ((response = d(messages[i])) != "")
-                            handle.Send(Encoding.ASCII.GetBytes(response + s));
-                    data = messages[messages.Length - 1];
+                    string[] messages = data.Split(new string[1] { sep }, StringSplitOptions.None);
+                    if (data.EndsWith(sep))
+                    {
+                        for (int i = 0; i < messages.Length - 1; i++)
+                            if ((response = reqDel(id,messages[i])) != "")
+                                handle.Send(Encoding.ASCII.GetBytes(response + sep));
+                        data = messages[messages.Length - 1];
+                    }
                 }
             }
             handle.Shutdown(SocketShutdown.Both);
             handle.Close();
-
+            //lastly tell the user we're done with the client
+            changeDel(id, false);
+        }
+    }
+    class ClientHandler
+    {
+        private static int lastid = -1;
+        public Thread Receive;
+        public int id;
+        /// <summary>
+        /// Intitialises a ClientHandler with a unique ID, and starts the thread given.
+        /// </summary>
+        /// <param name="r">a thread to begin</param>
+        /// <param name="s">The socket attached to the client</param>
+        public ClientHandler(Socket s, Thread Receive)
+        {
+            this.id = ++lastid;
+            this.Receive = Receive;
+            Receive.Start(new object[]{id,s});
+        }
+        public ~ClientHandler()
+        {
+            Receive.Abort();
         }
     }
 }
