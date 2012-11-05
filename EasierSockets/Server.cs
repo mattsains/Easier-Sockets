@@ -159,12 +159,57 @@ namespace EasierSockets
             //lastly tell the user we're done with the client
             changeDel(id, false);
         }
+        /// <summary>
+        /// Sends a client an unsolicited message
+        /// </summary>
+        /// <param name="id">the client to send to</param>
+        /// <param name="msg">The message to send</param>
+        /// <returns>whether the message was sent properly</returns>
+        public bool SendUpstream(int id, string msg)
+        {
+            //binary search through clients to find the right one
+            int pos = BinarySearchClients(id);
+            if (pos == -1) return false;
+            if (!clients[pos].isAlive) return false;
+            lock (clients[pos].sock)
+            {
+                try
+                {
+                    clients[pos].sock.Send(Encoding.ASCII.GetBytes(msg + separator));
+                }
+                catch (SocketException) { return false; }
+            }
+            return true;
+        }
+        private int BinarySearchClients(int id)
+        {
+            int a = 0;
+            int b = clients.Count - 1;
+            int c;
+            while (b >= a)
+            {
+                c = (b - a) / 2;
+                if (clients[c].id == id) return id;
+                if (clients[c].id < id)
+                {
+                    a = c;
+                    continue;
+                }
+                if (clients[c].id > id)
+                {
+                    b = c;
+                    continue;
+                }
+            }
+            return -1;
+        }
     }
     class ClientHandler
     {
         private static int lastid = -1;
         public Thread Receive;
         public int id;
+        public Socket sock;
         /// <summary>
         /// Intitialises a ClientHandler with a unique ID, and starts the thread given.
         /// </summary>
@@ -174,7 +219,12 @@ namespace EasierSockets
         {
             this.id = ++lastid;
             this.Receive = Receive;
+            this.sock = s;
             Receive.Start(new object[]{id,s});
+        }
+        public bool isAlive
+        {
+            get { return Receive.IsAlive; }
         }
          ~ClientHandler()
         {
