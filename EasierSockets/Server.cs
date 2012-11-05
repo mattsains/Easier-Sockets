@@ -133,20 +133,24 @@ namespace EasierSockets
             while (handle.Connected)
             {
                 //wait for data to arrive
-                handle.Receive(bytes);
-                data += Encoding.ASCII.GetString(bytes);
+                int bytesrec = 0;
+                try{ bytesrec = handle.Receive(bytes); }
+                    catch (SocketException) { break; }
+
+                data += Encoding.ASCII.GetString(bytes,0,bytesrec);
                 
                 if (data.Contains(sep))
                 {
                     //we have a separator in the bufffer. Isolate it and send to the dispatcher
                     string[] messages = data.Split(new string[1] { sep }, StringSplitOptions.None);
-                    if (data.EndsWith(sep))
-                    {
-                        for (int i = 0; i < messages.Length - 1; i++)
-                            if ((response = reqDel(id,messages[i])) != "")
+                    for (int i = 0; i < messages.Length - 1; i++)
+                        if ((response = reqDel(id,messages[i])) != "")
+                            try
+                            {
                                 handle.Send(Encoding.ASCII.GetBytes(response + sep));
-                        data = messages[messages.Length - 1];
-                    }
+                            }
+                            catch (SocketException) { break; }
+                    data = messages[messages.Length - 1];
                 }
             }
             handle.Shutdown(SocketShutdown.Both);
@@ -171,7 +175,7 @@ namespace EasierSockets
             this.Receive = Receive;
             Receive.Start(new object[]{id,s});
         }
-        public ~ClientHandler()
+         ~ClientHandler()
         {
             Receive.Abort();
         }
