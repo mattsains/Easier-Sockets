@@ -12,7 +12,7 @@ namespace EasierSockets
     /// Called when the server sends a message
     /// </summary>
     /// <param name="msg">the message the server sent</param>
-    public delegate void ServerMessage (string msg);
+    public delegate void ServerMessage(string msg);
     /// <summary>
     /// Called when the connection is closed by the server
     /// </summary>
@@ -33,7 +33,7 @@ namespace EasierSockets
         /// <param name="host">the server to connect to</param>
         /// <param name="port">the port to use</param>
         /// <param name="separator">what signals the end of a message?</param>
-        public ClientSock(string host, int port, string separator, ServerDisconnect discon,ServerMessage mess)
+        public ClientSock(string host, int port, string separator, ServerDisconnect discon, ServerMessage mess)
         {
             IPHostEntry hostip = Dns.GetHostEntry(host);
             IPAddress ip = hostip.AddressList[0];
@@ -41,8 +41,8 @@ namespace EasierSockets
             //TODO: Allow different modes like UDP
             sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             this.separator = separator;
-            this.serverDisconnect=discon;
-            this.serverMessage=mess;
+            this.serverDisconnect = discon;
+            this.serverMessage = mess;
             sock.Connect(endpoint);
             t = new Thread(new ThreadStart(WaitForServer));
             t.Start();
@@ -59,7 +59,7 @@ namespace EasierSockets
             {
                 sock.Send(tx);
             }
-            catch(SocketException){serverDisconnect(); return false;}
+            catch (SocketException) { serverDisconnect(); return false; }
             return true;
         }
         /// <summary>
@@ -67,18 +67,33 @@ namespace EasierSockets
         /// </summary>
         private void WaitForServer()
         {
-            string data="";
+            string data = "";
             while (sock.Connected)
             {
-                byte[]rx={};
-                sock.Receive(rx);
-                data+=Encoding.ASCII.GetString(rx);
+                byte[] rx = new byte[1024];
+                int bytesRec = 0;
+                try
+                {
+                    bytesRec = sock.Receive(rx);
+                }
+                catch (SocketException)
+                {
+                    // let the user know the server has gone.
+                    serverDisconnect();
+                    return;
+                }
+                if (bytesRec == 0)
+                {
+                    serverDisconnect();
+                    return;
+                }
+                data += Encoding.ASCII.GetString(rx, 0, bytesRec);
                 if (data.Contains(separator))
                 {
-                    string[] messages=data.Split(new string[]{separator},StringSplitOptions.None);
-                    for (int i=0; i<messages.Length-1;i++)
+                    string[] messages = data.Split(new string[] { separator }, StringSplitOptions.None);
+                    for (int i = 0; i < messages.Length - 1; i++)
                         serverMessage(messages[i]);
-                    data=messages[messages.Length-1];
+                    data = messages[messages.Length - 1];
                 }
             }
             //inform the user that the server is gone
@@ -87,7 +102,7 @@ namespace EasierSockets
         /// <summary>
         /// Destructor: closes the connection
         /// </summary>
-        public ~ClientSock()
+        ~ClientSock()
         {
             sock.Shutdown(SocketShutdown.Both);
             sock.Close();
