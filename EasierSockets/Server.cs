@@ -136,6 +136,7 @@ namespace EasierSockets
                 int bytesrec = 0;
                 try{ bytesrec = handle.Receive(bytes); }
                     catch (SocketException) { break; }
+                if (bytesrec == 0) break; //somehow this is a thing... the connection is closed if this thing returns zero
 
                 data += Encoding.ASCII.GetString(bytes,0,bytesrec);
                 
