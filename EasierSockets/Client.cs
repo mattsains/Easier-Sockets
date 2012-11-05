@@ -52,7 +52,7 @@ namespace EasierSockets
         /// </summary>
         /// <param name="message">The message to send. The separator is added automatically</param>
         /// <returns>Whether the send was successful (also calls delegate if unsuccessful</returns>
-        public bool send(string message)
+        public bool Send(string message)
         {
             byte[] tx = Encoding.ASCII.GetBytes(message + separator);
             try
