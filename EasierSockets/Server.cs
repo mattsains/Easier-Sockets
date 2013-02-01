@@ -206,7 +206,7 @@ namespace EasierSockets
     }
     class ClientHandler
     {
-        private static int lastid = -1;
+        private static int lastid = 0;
         public Thread Receive;
         public int id;
         public Socket sock;
@@ -217,7 +217,7 @@ namespace EasierSockets
         /// <param name="s">The socket attached to the client</param>
         public ClientHandler(Socket s, Thread Receive)
         {
-            this.id = ++lastid;
+            this.id = lastid++;
             this.Receive = Receive;
             this.sock = s;
             Receive.Start(new object[]{id,s});
