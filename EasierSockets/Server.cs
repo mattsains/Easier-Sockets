@@ -36,7 +36,7 @@ namespace EasierSockets
         /// starts listening on the port specified.
         /// WARNING: Delegates must be thread safe
         /// </summary>
-        /// <param name="ip">The IP address to listen for. Use "any" for all IPs</param>
+        /// <param name="ip">The IP address to listen for. Use "0.0.0.0" or "any" for all IPs</param>
         /// <param name="port">The port to listen on</param>
         /// <param name="separator">What signals the end of a message? A good choice is \n</param>
         /// <param name="clientstatechange">A delegate that is called when a client connects or disconnects</param>
