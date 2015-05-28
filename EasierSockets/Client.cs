@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -36,7 +36,7 @@ namespace EasierSockets
         public ClientSock(string host, int port, string separator, ServerDisconnect discon, ServerMessage mess)
         {
             IPHostEntry hostip = Dns.GetHostEntry(host);
-            IPAddress ip = hostip.AddressList[0];
+            IPAddress ip = hostip.AddressList.First(addr => addr.AddressFamily == AddressFamily.InterNetwork);
             IPEndPoint endpoint = new IPEndPoint(ip, port);
             //TODO: Allow different modes like UDP
             sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -52,7 +52,7 @@ namespace EasierSockets
         /// </summary>
         /// <param name="message">The message to send. The separator is added automatically</param>
         /// <returns>Whether the send was successful (also calls delegate if unsuccessful</returns>
-        public bool send(string message)
+        public bool Send(string message)
         {
             byte[] tx = Encoding.ASCII.GetBytes(message + separator);
             try
@@ -62,6 +62,31 @@ namespace EasierSockets
             catch (SocketException) { serverDisconnect(); return false; }
             return true;
         }
+
+        public class ConnectionInfo
+        {
+            public IPAddress ServerIP;
+            public IPAddress ClientIP;
+            public int ServerPort;
+            public int ClientPort;
+        }
+
+        public ConnectionInfo GetClientConnectionInfo(int id)
+        {
+            IPEndPoint localEndpoint, remoteEndpoint;
+            if (sock.LocalEndPoint.AddressFamily != AddressFamily.InterNetwork || sock.RemoteEndPoint.AddressFamily != AddressFamily.InterNetwork)
+                return null;
+            localEndpoint = (IPEndPoint)sock.LocalEndPoint;
+            remoteEndpoint = (IPEndPoint)sock.RemoteEndPoint;
+            return new ConnectionInfo()
+            {
+                ClientIP = localEndpoint.Address,
+                ClientPort = localEndpoint.Port,
+                ServerIP = remoteEndpoint.Address,
+                ServerPort = remoteEndpoint.Port,
+            };
+        }
+
         /// <summary>
         /// endless function to receive messages from server
         /// </summary>

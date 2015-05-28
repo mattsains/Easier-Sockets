@@ -2,5 +2,6 @@
 bin
 obj
 *.suo
+Desktop.ini
 # mstest test results
 TestResults
