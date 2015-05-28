@@ -31,18 +31,18 @@ namespace EasierSockets
         // The physical socket we're using
         private Socket ServerSocket;
 
-        
+
         /// <summary>
         /// starts listening on the port specified.
         /// WARNING: Delegates must be thread safe
         /// </summary>
-        /// <param name="ip">The IP address to listen for. Use "any" for all IPs</param>
+        /// <param name="ip">The IP address to listen for. Use "0.0.0.0" or "any" for all IPs</param>
         /// <param name="port">The port to listen on</param>
         /// <param name="separator">What signals the end of a message? A good choice is \n</param>
         /// <param name="clientstatechange">A delegate that is called when a client connects or disconnects</param>
         /// <param name="clientrequest">A delegate that is called when a client sends a request</param>
         // TODO: Allow other types of comms, like UDP, IPv6, etc
-        public ServerSock(string ip, int port, string separator, ClientStateChange clientstatechange,ClientRequest clientrequest)
+        public ServerSock(string ip, int port, string separator, ClientStateChange clientstatechange, ClientRequest clientrequest)
         {
             this.clientchange = clientstatechange;
             this.clientreq = clientrequest;
@@ -63,12 +63,12 @@ namespace EasierSockets
                 {
                     throw new Exception("IP Address malformed");
                 }
-            
+
             //IP Address should be valid by now, attempt a bind
             ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             IPEndPoint remoteEP = new IPEndPoint(IP, port);
             ServerSocket.Bind(remoteEP);
-            
+
             this.separator = separator;
             Listener = new Thread(new ThreadStart(ListenAsync));
             Listener.Start();
@@ -96,7 +96,7 @@ namespace EasierSockets
                 }
             }
         }
-        
+
         /// <summary>
         /// talks to a single client. Waits for the separator, then calls the delegate
         /// </summary>
@@ -106,26 +106,28 @@ namespace EasierSockets
             string sep;
             ClientStateChange changeDel;
             ClientRequest reqDel;
-            
+
             //cache some variables so we don't lock them for long
-            lock (separator) lock (clientchange) lock (clientreq)
-            {
-                
-                sep = separator;
-                changeDel = clientchange;
-                reqDel = clientreq;
-            }
+            lock (separator)
+                lock (clientchange)
+                    lock (clientreq)
+                    {
+
+                        sep = separator;
+                        changeDel = clientchange;
+                        reqDel = clientreq;
+                    }
 
             //crazy casts
             int id = (int)((object[])o)[0];
             Socket handle = (Socket)((object[])o)[1];
-            
+
             //new arriving data
             byte[] bytes = new byte[1024];
             //buffer
             string data = "";
             //how do we reply?
-            string response="";
+            string response = "";
 
             //tell the user that we're connected to a new client
             changeDel(id, true);
@@ -134,18 +136,18 @@ namespace EasierSockets
             {
                 //wait for data to arrive
                 int bytesrec = 0;
-                try{ bytesrec = handle.Receive(bytes); }
-                    catch (SocketException) { break; }
+                try { bytesrec = handle.Receive(bytes); }
+                catch (SocketException) { break; }
                 if (bytesrec == 0) break; //somehow this is a thing... the connection is closed if this thing returns zero
 
-                data += Encoding.ASCII.GetString(bytes,0,bytesrec);
-                
+                data += Encoding.ASCII.GetString(bytes, 0, bytesrec);
+
                 if (data.Contains(sep))
                 {
                     //we have a separator in the bufffer. Isolate it and send to the dispatcher
                     string[] messages = data.Split(new string[1] { sep }, StringSplitOptions.None);
                     for (int i = 0; i < messages.Length - 1; i++)
-                        if ((response = reqDel(id,messages[i])) != "")
+                        if ((response = reqDel(id, messages[i])) != "")
                             try
                             {
                                 handle.Send(Encoding.ASCII.GetBytes(response + sep));
@@ -181,32 +183,67 @@ namespace EasierSockets
             }
             return true;
         }
+
+        public class ConnectionInfo
+        {
+            public IPAddress ServerIP;
+            public IPAddress ClientIP;
+            public int ServerPort;
+            public int ClientPort;
+        }
+
+        public ConnectionInfo GetClientConnectionInfo(int id)
+        {
+            int pos = BinarySearchClients(id);
+            if (pos == -1) return null;
+            if (!clients[pos].isAlive) return null;
+
+            ConnectionInfo connInfo = new ConnectionInfo();
+            IPEndPoint localEndpoint, remoteEndpoint;
+            lock (clients[pos].sock)
+            {
+                Socket clientSock = clients[pos].sock;
+                if (clientSock.LocalEndPoint.AddressFamily != AddressFamily.InterNetwork || clientSock.RemoteEndPoint.AddressFamily != AddressFamily.InterNetwork)
+                    return null;
+                localEndpoint = (IPEndPoint)clientSock.LocalEndPoint;
+                remoteEndpoint = (IPEndPoint)clientSock.RemoteEndPoint;
+            }
+            connInfo.ClientIP = remoteEndpoint.Address;
+            connInfo.ClientPort = remoteEndpoint.Port;
+            connInfo.ServerIP = localEndpoint.Address;
+            connInfo.ServerPort = localEndpoint.Port;
+            return connInfo;
+        }
+
         private int BinarySearchClients(int id)
         {
-            int a = 0;
-            int b = clients.Count - 1;
-            int c;
-            while (b >= a)
+            lock (clients)
             {
-                c = (b - a) / 2;
-                if (clients[c].id == id) return id;
-                if (clients[c].id < id)
+                int a = 0;
+                int b = clients.Count - 1;
+                int c;
+                while (b >= a)
                 {
-                    a = c;
-                    continue;
+                    c = (b - a) / 2;
+                    if (clients[c].id == id) return id;
+                    if (clients[c].id < id)
+                    {
+                        a = c;
+                        continue;
+                    }
+                    if (clients[c].id > id)
+                    {
+                        b = c;
+                        continue;
+                    }
                 }
-                if (clients[c].id > id)
-                {
-                    b = c;
-                    continue;
-                }
+                return -1;
             }
-            return -1;
         }
     }
     class ClientHandler
     {
-        private static int lastid = -1;
+        private static int lastid = 0;
         public Thread Receive;
         public int id;
         public Socket sock;
@@ -217,16 +254,16 @@ namespace EasierSockets
         /// <param name="s">The socket attached to the client</param>
         public ClientHandler(Socket s, Thread Receive)
         {
-            this.id = ++lastid;
+            this.id = lastid++;
             this.Receive = Receive;
             this.sock = s;
-            Receive.Start(new object[]{id,s});
+            Receive.Start(new object[] { id, s });
         }
         public bool isAlive
         {
             get { return Receive.IsAlive; }
         }
-         ~ClientHandler()
+        ~ClientHandler()
         {
             Receive.Abort();
         }
